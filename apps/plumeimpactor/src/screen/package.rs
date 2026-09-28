@@ -27,6 +27,7 @@ pub enum Message {
     UpdateInstallMode(SignerInstallMode),
     AddTweak,
     AddBundle,
+    SelectedPaths(SelectionKind, Vec<PathBuf>),
     RemoveTweak(usize),
     SetCustomIcon,
     ClearCustomIcon,
@@ -34,6 +35,12 @@ pub enum Message {
     ClearCustomEntitlements,
     Back,
     RequestInstallation,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum SelectionKind {
+    Tweak,
+    Bundle,
 }
 
 #[derive(Debug, Clone)]
@@ -152,33 +159,40 @@ impl PackageScreen {
                 self.options.install_mode = mode;
                 Task::none()
             }
-            Message::AddTweak => {
-                let paths = rfd::FileDialog::new()
-                    .add_filter("Tweak files", &["deb", "dylib"])
-                    .set_title("Select Tweak File(s)")
-                    .pick_files();
-
-                if let Some(paths) = paths {
-                    match &mut self.options.tweaks {
-                        Some(vec) => vec.extend(paths),
+            Message::AddTweak => Task::perform(
+                async {
+                    rfd::FileDialog::new()
+                        .add_filter("Tweak files", &["deb", "dylib"])
+                        .set_title("Select Tweak File(s)")
+                        .pick_files()
+                },
+                |paths| Message::SelectedPaths(SelectionKind::Tweak, paths.unwrap_or_default()),
+            ),
+            Message::AddBundle => Task::perform(
+                async {
+                    rfd::FileDialog::new()
+                        .set_title("Select Bundle Folder(s)")
+                        .pick_folders()
+                        .unwrap_or_default()
+                },
+                |paths| Message::SelectedPaths(SelectionKind::Bundle, paths),
+            ),
+            Message::SelectedPaths(kind, paths) => {
+                match kind {
+                    SelectionKind::Tweak => match &mut self.options.tweaks {
+                        Some(tweaks) => tweaks.extend(paths),
                         None => self.options.tweaks = Some(paths),
-                    }
-                }
+                    },
 
-                Task::none()
-            }
-            Message::AddBundle => {
-                let paths = rfd::FileDialog::new()
-                    .set_title("Select Bundle Folder(s)")
-                    .pick_folders()
-                    .unwrap_or_default();
-
-                for path in paths {
-                    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                        if ["framework", "bundle", "appex"].contains(&ext) {
-                            match &mut self.options.tweaks {
-                                Some(vec) => vec.push(path),
-                                None => self.options.tweaks = Some(vec![path]),
+                    SelectionKind::Bundle => {
+                        for path in paths {
+                            if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                                if ["framework", "bundle", "appex"].contains(&ext) {
+                                    match &mut self.options.tweaks {
+                                        Some(tweaks) => tweaks.push(path),
+                                        None => self.options.tweaks = Some(vec![path]),
+                                    }
+                                }
                             }
                         }
                     }
