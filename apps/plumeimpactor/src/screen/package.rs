@@ -42,6 +42,7 @@ pub enum SelectionKind {
     Tweak,
     Bundle,
     Image,
+    Entitlements,
 }
 
 #[derive(Debug, Clone)]
@@ -205,6 +206,12 @@ impl PackageScreen {
                             self.custom_icon_handle = icon_handle_from_path(&path);
                         }
                     }
+                    SelectionKind::Entitlements => {
+                        let path = paths.into_iter().next();
+                        if let Some(path) = path {
+                            self.options.custom_entitlements = Some(path);
+                        }
+                    }
                 }
 
                 Task::none()
@@ -232,18 +239,17 @@ impl PackageScreen {
                 self.custom_icon_handle = None;
                 Task::none()
             }
-            Message::SetCustomEntitlements => {
-                let path = rfd::FileDialog::new()
-                    .add_filter("Entitlements plist", &["plist", "xml"])
-                    .set_title("Select Entitlements File")
-                    .pick_file();
-
-                if let Some(path) = path {
-                    self.options.custom_entitlements = Some(path);
-                }
-
-                Task::none()
-            }
+            Message::SetCustomEntitlements => Task::perform(
+                async {
+                    rfd::FileDialog::new()
+                        .add_filter("Entitlements plist", &["plist", "xml", "entitlements"])
+                        .set_title("Select Entitlements File")
+                        .pick_file()
+                },
+                |path| {
+                    Message::SelectedPaths(SelectionKind::Entitlements, path.into_iter().collect())
+                },
+            ),
             Message::ClearCustomEntitlements => {
                 self.options.custom_entitlements = None;
                 Task::none()
