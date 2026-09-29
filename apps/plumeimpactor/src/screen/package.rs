@@ -41,6 +41,7 @@ pub enum Message {
 pub enum SelectionKind {
     Tweak,
     Bundle,
+    Image,
 }
 
 #[derive(Debug, Clone)]
@@ -196,6 +197,14 @@ impl PackageScreen {
                             }
                         }
                     }
+                    SelectionKind::Image => {
+                        let path = paths.into_iter().next();
+                        if let Some(path) = path {
+                            self.options.custom_icon = Some(path.clone());
+                            self.custom_icon_path = Some(path.clone());
+                            self.custom_icon_handle = icon_handle_from_path(&path);
+                        }
+                    }
                 }
 
                 Task::none()
@@ -208,20 +217,15 @@ impl PackageScreen {
                 }
                 Task::none()
             }
-            Message::SetCustomIcon => {
-                let path = rfd::FileDialog::new()
-                    .add_filter("Image files", &["png", "jpg", "jpeg"])
-                    .set_title("Select App Icon")
-                    .pick_file();
-
-                if let Some(path) = path {
-                    self.options.custom_icon = Some(path.clone());
-                    self.custom_icon_path = Some(path.clone());
-                    self.custom_icon_handle = icon_handle_from_path(&path);
-                }
-
-                Task::none()
-            }
+            Message::SetCustomIcon => Task::perform(
+                async {
+                    rfd::FileDialog::new()
+                        .add_filter("Image files", &["png", "jpg", "jpeg"])
+                        .set_title("Select App Icon")
+                        .pick_file()
+                },
+                |path| Message::SelectedPaths(SelectionKind::Image, path.into_iter().collect()),
+            ),
             Message::ClearCustomIcon => {
                 self.options.custom_icon = None;
                 self.custom_icon_path = None;
